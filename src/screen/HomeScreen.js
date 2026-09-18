@@ -1,12 +1,11 @@
-import { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, FlatList, Alert } from 'react-native';
+import { useState, useEffect, useMemo } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, FlatList, Alert, ActivityIndicator } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
 import { auth } from '../../firebaseConfig';
-import { subscribeToDocuments, addDocument, deleteDocument } from '../services/documentService';
+import { subscribeToDocuments, addDocument, deleteDocument, uploadFileToStorage, updateDocumentSubject } from '../services/documentService';
 import DocumentCard from '../components/DocumentCard';
 
-const FILTERS = ['Tất cả', 'Giải tích', 'Kinh tế vi mô', 'Kỹ thuật phần mềm'];
+const MAX_SIZE_MB = 15;
 
 export default function HomeScreen({ onOpenSummary, onOpenChat }) {
   const [documents, setDocuments] = useState([]);
@@ -20,29 +19,38 @@ export default function HomeScreen({ onOpenSummary, onOpenChat }) {
     return unsubscribe;
   }, []);
 
+  // Tự sinh danh sách tab từ các subject thật có trong dữ liệu (FR-12)
+  const filters = useMemo(() => {
+    const uniqueSubjects = [...new Set(documents.map((d) => d.subject).filter(Boolean))];
+    return ['Tất cả', ...uniqueSubjects.filter((s) => s !== 'Chưa phân loại'), 'Chưa phân loại'];
+  }, [documents]);
+
   const handlePickDocument = async () => {
     const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf'] });
     if (result.canceled) return;
 
     const file = result.assets[0];
-    const sizeKB = (file.size / 1024).toFixed(0);
+    const sizeMB = file.size / (1024 * 1024);
 
-    if (file.size > 800 * 1024) {
-      Alert.alert('File quá lớn', 'Vui lòng chọn file PDF dưới 800KB.');
+    if (sizeMB > MAX_SIZE_MB) {
+      Alert.alert('File quá lớn', `Vui lòng chọn file PDF dưới ${MAX_SIZE_MB}MB.`);
       return;
     }
 
     setUploading(true);
     try {
-      const base64Content = await FileSystem.readAsStringAsync(file.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      const { downloadUrl, storagePath } = await uploadFileToStorage(
+        auth.currentUser.uid,
+        file.uri,
+        file.name
+      );
 
       await addDocument(auth.currentUser.uid, {
         name: file.name,
         type: 'PDF',
-        size: `${sizeKB} KB`,
-        base64Content,
+        size: `${sizeMB.toFixed(1)} MB`,
+        downloadUrl,
+        storagePath,
       });
 
       Alert.alert('Thành công', 'Đã tải lên tài liệu');
@@ -50,6 +58,14 @@ export default function HomeScreen({ onOpenSummary, onOpenChat }) {
       Alert.alert('Lỗi', err.message);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleChangeSubject = async (docId, newSubject) => {
+    try {
+      await updateDocumentSubject(docId, newSubject);
+    } catch (err) {
+      Alert.alert('Lỗi', err.message);
     }
   };
 
@@ -64,7 +80,7 @@ export default function HomeScreen({ onOpenSummary, onOpenChat }) {
       <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
-        data={FILTERS}
+        data={filters}
         keyExtractor={(item) => item}
         style={styles.filterList}
         renderItem={({ item }) => (
@@ -86,14 +102,15 @@ export default function HomeScreen({ onOpenSummary, onOpenChat }) {
             document={item}
             onSummarize={() => onOpenSummary(item)}
             onChat={() => onOpenChat(item)}
-            onDelete={() => deleteDocument(item.id)}
+            onDelete={() => deleteDocument(item.id, item.storagePath)}
+            onChangeSubject={handleChangeSubject}
           />
         )}
         ListEmptyComponent={<Text style={styles.emptyText}>Chưa có tài liệu nào. Bấm + để tải lên.</Text>}
       />
 
       <TouchableOpacity style={styles.fab} onPress={handlePickDocument} disabled={uploading}>
-        <Text style={styles.fabText}>{uploading ? '...' : '+'}</Text>
+        {uploading ? <ActivityIndicator color="#fff" /> : <Text style={styles.fabText}>+</Text>}
       </TouchableOpacity>
     </View>
   );

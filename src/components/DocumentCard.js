@@ -1,6 +1,30 @@
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, Platform } from 'react-native';
 
-export default function DocumentCard({ document, onSummarize, onChat, onDelete }) {
+export default function DocumentCard({ document, onSummarize, onChat, onDelete, onChangeSubject }) {
+  const handlePressTag = () => {
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        'Phân loại tài liệu',
+        'Nhập tên môn học/chủ đề cho tài liệu này',
+        [
+          { text: 'Hủy', style: 'cancel' },
+          {
+            text: 'Xác nhận',
+            onPress: (text) => {
+              if (text && text.trim()) {
+                onChangeSubject(document.id, text.trim());
+              }
+            },
+          },
+        ],
+        'plain-text',
+        document.subject === 'Chưa phân loại' ? '' : document.subject
+      );
+    } else {
+      Alert.alert('Chưa hỗ trợ', 'Tính năng này hiện chỉ hỗ trợ trên iOS.');
+    }
+  };
+
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
@@ -13,9 +37,10 @@ export default function DocumentCard({ document, onSummarize, onChat, onDelete }
         </TouchableOpacity>
       </View>
 
-      <View style={styles.tag}>
+      <TouchableOpacity style={styles.tag} onPress={handlePressTag}>
         <Text style={styles.tagText}>{document.subject}</Text>
-      </View>
+        <Text style={styles.tagEditIcon}> ✎</Text>
+      </TouchableOpacity>
 
       <View style={styles.actionRow}>
         <TouchableOpacity style={styles.actionButtonPrimary} onPress={onSummarize}>
@@ -37,8 +62,12 @@ const styles = StyleSheet.create({
   title: { fontSize: 15, fontWeight: '600' },
   meta: { fontSize: 12, color: '#888', marginTop: 2 },
   deleteIcon: { fontSize: 16 },
-  tag: { alignSelf: 'flex-start', backgroundColor: '#fee2e2', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginTop: 8 },
+  tag: {
+    flexDirection: 'row', alignSelf: 'flex-start', backgroundColor: '#fee2e2',
+    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginTop: 8, alignItems: 'center',
+  },
   tagText: { fontSize: 11, color: '#dc2626' },
+  tagEditIcon: { fontSize: 11, color: '#dc2626' },
   actionRow: { flexDirection: 'row', marginTop: 12, gap: 8 },
   actionButtonPrimary: { flex: 1, backgroundColor: '#ede9fe', borderRadius: 8, paddingVertical: 8, alignItems: 'center' },
   actionTextPrimary: { color: PRIMARY, fontSize: 13, fontWeight: '600' },

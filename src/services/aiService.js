@@ -1,4 +1,4 @@
-const GEMINI_API_KEY = 'Dán API key ở đây nha thầy';
+const GEMINI_API_KEY = 'DÁN_API_KEY_CỦA_BẠN_VÀO_ĐÂY';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 async function callGemini(promptText, base64File, mimeType) {
