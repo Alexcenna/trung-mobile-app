@@ -26,7 +26,7 @@ export default function ChatDetailScreen({ conversation, document, onBack }) {
     try {
       await sendMessage(conversation.id, 'user', question);
       const answer = await askQuestionAboutDocument(
-        document?.base64Content || '',
+        document || {},
         messages.map((m) => ({ role: m.role, text: m.text })),
         question
       );

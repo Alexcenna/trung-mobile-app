@@ -12,13 +12,13 @@ export default function SummaryScreen({ document, onBack }) {
   const [summary, setSummary] = useState(null);
 
   const handleGenerate = async () => {
-    if (!document.base64Content) {
+    if (!document.base64Content && !document.textContent) {
       Alert.alert('Thiếu nội dung', 'Tài liệu này chưa có dữ liệu để tóm tắt.');
       return;
     }
     setLoading(true);
     try {
-      const result = await summarizeDocument(document.base64Content, level);
+      const result = await summarizeDocument(document, level);
       setSummary(result);
     } catch (err) {
       Alert.alert('Lỗi', err.message);
@@ -27,18 +27,18 @@ export default function SummaryScreen({ document, onBack }) {
     }
   };
 
- const handleSave = async () => {
-  try {
-    await updateDoc(doc(db, 'documents', document.id), {
-      summaries: arrayUnion({ level, content: summary, createdAt: new Date().toISOString() }),
-    });
-    Alert.alert('Đã lưu', 'Bản tóm tắt đã được lưu lại', [
-      { text: 'OK', onPress: () => onBack() },
-    ]);
-  } catch (err) {
-    Alert.alert('Lỗi', err.message);
-  }
-};
+  const handleSave = async () => {
+    try {
+      await updateDoc(doc(db, 'documents', document.id), {
+        summaries: arrayUnion({ level, content: summary, createdAt: new Date().toISOString() }),
+      });
+      Alert.alert('Đã lưu', 'Bản tóm tắt đã được lưu lại', [
+        { text: 'OK', onPress: () => onBack() },
+      ]);
+    } catch (err) {
+      Alert.alert('Lỗi', err.message);
+    }
+  };
 
   return (
     <View style={styles.container}>

@@ -12,12 +12,11 @@ export function subscribeToDocuments(userId, callback) {
   });
 }
 
-// Cập nhật phân loại/môn học cho tài liệu (FR-12)
 export async function updateDocumentSubject(docId, newSubject) {
   await updateDoc(doc(db, 'documents', docId), { subject: newSubject });
 }
 
-export async function addDocument(userId, { name, type, size, subject, base64Content }) {
+export async function addDocument(userId, { name, type, size, subject, base64Content, textContent }) {
   await addDoc(docsRef, {
     userId,
     name,
@@ -26,6 +25,7 @@ export async function addDocument(userId, { name, type, size, subject, base64Con
     subject: subject || 'Chưa phân loại',
     createdAt: serverTimestamp(),
     base64Content: base64Content || '',
+    textContent: textContent || '',
   });
 }
 

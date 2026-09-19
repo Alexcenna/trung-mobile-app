@@ -1,34 +1,59 @@
-const GEMINI_API_KEY = 'DÁN_API_KEY_CỦA_BẠN_VÀO_ĐÂY';
+const GEMINI_API_KEY = 'Dán API key ở đây nha';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`;
 
-async function callGemini(promptText, base64File, mimeType) {
+async function callGemini(promptText, base64File, mimeType, retries = 2) {
   const parts = [{ text: promptText }];
   if (base64File) {
     parts.push({ inline_data: { mime_type: mimeType, data: base64File } });
   }
 
-  const response = await fetch(GEMINI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts }] }),
-  });
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const response = await fetch(GEMINI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts }] }),
+    });
 
-  const data = await response.json();
-  if (data.error) throw new Error(data.error.message);
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Không nhận được phản hồi từ AI.';
+    const data = await response.json();
+
+    if (!data.error) {
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Không nhận được phản hồi từ AI.';
+    }
+
+    const isOverloaded = data.error.message?.includes('high demand') || response.status === 503;
+    if (isOverloaded && attempt < retries) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      continue;
+    }
+
+    throw new Error(data.error.message);
+  }
 }
 
-export async function summarizeDocument(base64Pdf, level = 'Trung bình') {
-  const prompt = `Đọc nội dung tài liệu PDF đính kèm và tóm tắt ở mức độ "${level}". Trình bày theo cấu trúc rõ ràng, đánh số từng ý chính.`;
-  return callGemini(prompt, base64Pdf, 'application/pdf');
+export async function summarizeDocument(documentData, level = 'Trung bình') {
+  const prompt = `Tóm tắt nội dung sau ở mức độ "${level}". Trình bày theo cấu trúc rõ ràng, đánh số từng ý chính.`;
+
+  if (documentData.base64Content) {
+    return callGemini(prompt, documentData.base64Content, 'application/pdf');
+  } else if (documentData.textContent) {
+    return callGemini(`${prompt}\n\nNội dung:\n${documentData.textContent}`);
+  }
+  throw new Error('Tài liệu không có nội dung để tóm tắt.');
 }
 
-export async function askQuestionAboutDocument(base64Pdf, chatHistory, newQuestion) {
+export async function askQuestionAboutDocument(documentData, chatHistory, newQuestion) {
   const historyText = chatHistory
     .map((m) => `${m.role === 'user' ? 'Sinh viên' : 'AI'}: ${m.text}`)
     .join('\n');
-  const prompt = `Dựa trên tài liệu PDF đính kèm, hãy trả lời câu hỏi của sinh viên. Ưu tiên thông tin trong tài liệu.\n\nLịch sử hội thoại:\n${historyText}\n\nCâu hỏi mới: ${newQuestion}`;
-  return callGemini(prompt, base64Pdf, 'application/pdf');
+
+  const basePrompt = `Dựa trên tài liệu, hãy trả lời câu hỏi của sinh viên. Ưu tiên thông tin trong tài liệu.\n\nLịch sử hội thoại:\n${historyText}\n\nCâu hỏi mới: ${newQuestion}`;
+
+  if (documentData?.base64Content) {
+    return callGemini(basePrompt, documentData.base64Content, 'application/pdf');
+  } else if (documentData?.textContent) {
+    return callGemini(`${basePrompt}\n\nNội dung tài liệu:\n${documentData.textContent}`);
+  }
+  return callGemini(basePrompt);
 }
 
 export async function extractTextFromImage(base64Image) {

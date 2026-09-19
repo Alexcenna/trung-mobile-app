@@ -1,11 +1,19 @@
 import { useState, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, FlatList, Alert, ActivityIndicator } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { auth } from '../../firebaseConfig';
-import { subscribeToDocuments, addDocument, deleteDocument, uploadFileToStorage, updateDocumentSubject } from '../services/documentService';
+import { subscribeToDocuments, addDocument, deleteDocument, updateDocumentSubject } from '../services/documentService';
 import DocumentCard from '../components/DocumentCard';
 
-const MAX_SIZE_MB = 15;
+const MAX_SIZE_KB = 700; // Firestore giới hạn 1MB/document, base64 phình ~1.33 lần
+
+const getFileTypeInfo = (fileName) => {
+  const ext = fileName.split('.').pop().toLowerCase();
+  if (ext === 'pdf') return { type: 'PDF' };
+  if (ext === 'txt') return { type: 'TXT' };
+  return { type: 'UNKNOWN' };
+};
 
 export default function HomeScreen({ onOpenSummary, onOpenChat }) {
   const [documents, setDocuments] = useState([]);
@@ -19,39 +27,56 @@ export default function HomeScreen({ onOpenSummary, onOpenChat }) {
     return unsubscribe;
   }, []);
 
-  // Tự sinh danh sách tab từ các subject thật có trong dữ liệu (FR-12)
   const filters = useMemo(() => {
     const uniqueSubjects = [...new Set(documents.map((d) => d.subject).filter(Boolean))];
     return ['Tất cả', ...uniqueSubjects.filter((s) => s !== 'Chưa phân loại'), 'Chưa phân loại'];
   }, [documents]);
 
   const handlePickDocument = async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf'] });
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf', 'text/plain'],
+    });
     if (result.canceled) return;
 
     const file = result.assets[0];
-    const sizeMB = file.size / (1024 * 1024);
+    const sizeKB = file.size / 1024;
 
-    if (sizeMB > MAX_SIZE_MB) {
-      Alert.alert('File quá lớn', `Vui lòng chọn file PDF dưới ${MAX_SIZE_MB}MB.`);
+    if (sizeKB > MAX_SIZE_KB) {
+      Alert.alert('File quá lớn', `Vui lòng chọn file dưới ${MAX_SIZE_KB}KB (do giới hạn lưu trữ miễn phí).`);
       return;
     }
 
+    const { type: fileType } = getFileTypeInfo(file.name);
+
     setUploading(true);
     try {
-      const { downloadUrl, storagePath } = await uploadFileToStorage(
-        auth.currentUser.uid,
-        file.uri,
-        file.name
-      );
+      if (fileType === 'TXT') {
+        const textContent = await FileSystem.readAsStringAsync(file.uri, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
 
-      await addDocument(auth.currentUser.uid, {
-        name: file.name,
-        type: 'PDF',
-        size: `${sizeMB.toFixed(1)} MB`,
-        downloadUrl,
-        storagePath,
-      });
+        await addDocument(auth.currentUser.uid, {
+          name: file.name,
+          type: 'TXT',
+          size: `${sizeKB.toFixed(0)} KB`,
+          textContent,
+        });
+      } else if (fileType === 'PDF') {
+        const base64Content = await FileSystem.readAsStringAsync(file.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        await addDocument(auth.currentUser.uid, {
+          name: file.name,
+          type: 'PDF',
+          size: `${sizeKB.toFixed(0)} KB`,
+          base64Content,
+        });
+      } else {
+        Alert.alert('Không hỗ trợ', 'Định dạng file này chưa được hỗ trợ.');
+        setUploading(false);
+        return;
+      }
 
       Alert.alert('Thành công', 'Đã tải lên tài liệu');
     } catch (err) {
@@ -102,7 +127,7 @@ export default function HomeScreen({ onOpenSummary, onOpenChat }) {
             document={item}
             onSummarize={() => onOpenSummary(item)}
             onChat={() => onOpenChat(item)}
-            onDelete={() => deleteDocument(item.id, item.storagePath)}
+            onDelete={() => deleteDocument(item.id)}
             onChangeSubject={handleChangeSubject}
           />
         )}

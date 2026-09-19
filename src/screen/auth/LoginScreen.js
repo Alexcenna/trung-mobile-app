@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert } from 'react-native';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../../../firebaseConfig';
 
 export default function LoginScreen({ onNavigateToRegister }) {
@@ -21,6 +21,31 @@ export default function LoginScreen({ onNavigateToRegister }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleForgotPassword = () => {
+    if (!email) {
+      Alert.alert('Thiếu email', 'Vui lòng nhập email ở ô trên trước, sau đó bấm "Quên mật khẩu?"');
+      return;
+    }
+    Alert.alert(
+      'Đặt lại mật khẩu',
+      `Gửi email hướng dẫn đặt lại mật khẩu tới ${email}?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Gửi',
+          onPress: async () => {
+            try {
+              await sendPasswordResetEmail(auth, email);
+              Alert.alert('Đã gửi', 'Vui lòng kiểm tra hộp thư email để đặt lại mật khẩu.');
+            } catch (err) {
+              Alert.alert('Lỗi', err.message);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -48,6 +73,10 @@ export default function LoginScreen({ onNavigateToRegister }) {
         />
       </View>
 
+      <TouchableOpacity onPress={handleForgotPassword} style={styles.forgotButton}>
+        <Text style={styles.forgotText}>Quên mật khẩu?</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
         <Text style={styles.buttonText}>{loading ? 'Đang xử lý...' : 'Đăng Nhập'}</Text>
       </TouchableOpacity>
@@ -65,8 +94,10 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   label: { width: 100, fontSize: 16 },
   input: { flex: 1, height: 40, backgroundColor: '#b0b0b0', borderRadius: 4, paddingHorizontal: 8 },
+  forgotButton: { alignItems: 'flex-end', marginBottom: 16 },
+  forgotText: { color: '#4a90d9', fontSize: 13 },
   button: {
-    marginTop: 12, height: 44, backgroundColor: '#4a90d9', borderRadius: 6,
+    height: 44, backgroundColor: '#4a90d9', borderRadius: 6,
     alignItems: 'center', justifyContent: 'center',
   },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
